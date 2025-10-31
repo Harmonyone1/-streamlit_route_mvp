@@ -171,6 +171,8 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
             return False, "Database connection failed"
 
         # Create user with Supabase Auth
+        # Note: Set email_confirm to False for development/testing to skip email verification
+        # For production, remove this or set to True
         response = client.auth.sign_up({
             "email": email,
             "password": password,
@@ -178,7 +180,9 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
                 "data": {
                     "full_name": full_name,
                     "company_name": company_name
-                }
+                },
+                # Uncomment the line below to skip email verification (DEVELOPMENT ONLY):
+                # "email_confirm": False
             }
         })
 
