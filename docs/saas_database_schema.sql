@@ -207,23 +207,48 @@ RETURNS SETOF UUID AS $$
     WHERE user_id = user_uuid AND is_active = TRUE;
 $$ LANGUAGE SQL STABLE;
 
--- Profiles: Users can read/update their own profile
+-- Profiles: Users can read/update/create their own profile
 CREATE POLICY "Users can view own profile" ON profiles
     FOR SELECT USING (auth.uid() = id);
 
 CREATE POLICY "Users can update own profile" ON profiles
     FOR UPDATE USING (auth.uid() = id);
 
--- Organizations: Members can view their organization
+CREATE POLICY "Users can insert own profile" ON profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Organizations: Members can view their organization, authenticated users can create
 CREATE POLICY "Members can view their organization" ON organizations
     FOR SELECT USING (
         id IN (SELECT get_user_organization_ids(auth.uid()))
     );
 
--- Organization members: View members of own organization
+CREATE POLICY "Authenticated users can create organization" ON organizations
+    FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Owners can update their organization" ON organizations
+    FOR UPDATE USING (
+        id IN (
+            SELECT organization_id FROM organization_members
+            WHERE user_id = auth.uid() AND role = 'owner' AND is_active = TRUE
+        )
+    );
+
+-- Organization members: View and insert members of own organization
 CREATE POLICY "View organization members" ON organization_members
     FOR SELECT USING (
         organization_id IN (SELECT get_user_organization_ids(auth.uid()))
+    );
+
+CREATE POLICY "Authenticated users can join organization" ON organization_members
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Admins can manage organization members" ON organization_members
+    FOR ALL USING (
+        organization_id IN (
+            SELECT organization_id FROM organization_members
+            WHERE user_id = auth.uid() AND role IN ('owner', 'admin') AND is_active = TRUE
+        )
     );
 
 -- Technicians: Can only access own organization's technicians
