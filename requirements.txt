@@ -1,0 +1,17 @@
+streamlit
+pandas
+folium
+streamlit-folium
+ortools
+supabase
+openpyxl
+requests
+msal
+email-validator
+numpy
+python-dotenv
+gspread
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+xlrd
