@@ -9,14 +9,37 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.supabase_client import get_supabase_client
 from utils.maps import create_base_map, add_markers_to_map, display_map_in_streamlit
+from utils.auth import init_session_state, is_authenticated, get_current_user, get_current_organization
 import folium
 
 st.set_page_config(
-    page_title="Technician View",
+    page_title="Technician View - RouteFlow",
     page_icon="👷",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# Initialize session state for authentication
+init_session_state()
+
+# Check authentication (technicians can access this page)
+if not is_authenticated():
+    st.warning("⚠️ Please login to access Technician View")
+    st.info("Technician View is your mobile-friendly interface for viewing routes and navigating to stops.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button('🔐 Log In', type='primary', use_container_width=True):
+            st.switch_page('pages/login.py')
+    with col2:
+        if st.button('🚀 Sign Up Free', use_container_width=True):
+            st.switch_page('pages/register.py')
+
+    st.stop()
+
+# Get current user - technicians can view their own routes
+user = get_current_user()
+org = get_current_organization()
 
 # Mobile-friendly CSS
 st.markdown("""
@@ -65,6 +88,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title('👷 Technician Route View')
+st.markdown(f"**{user.get('full_name', 'Technician')}** @ {org.get('name', 'Organization')}")
 
 # Initialize session state for tracking
 if 'current_stop_index' not in st.session_state:

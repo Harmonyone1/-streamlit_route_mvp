@@ -11,11 +11,42 @@ from utils.supabase_client import get_supabase_client, get_all_stops, get_all_te
 from utils.optimization import create_data_model, optimize_routes, format_route_for_display
 from utils.maps import visualize_optimized_routes, create_stop_clusters_map, display_map_in_streamlit
 from utils.geocoding import geocode_address, format_coordinates
+from utils.auth import init_session_state, is_authenticated, get_current_user, get_current_organization, check_permission, show_user_menu, show_subscription_banner
 
-st.set_page_config(page_title="Operations - Route Optimization", layout="wide")
+st.set_page_config(page_title="Operations - RouteFlow", layout="wide")
 
-st.title('Route Optimization Operations')
-st.markdown('Plan, optimize, and dispatch daily routes for technicians')
+# Initialize session state for authentication
+init_session_state()
+
+# Check authentication
+if not is_authenticated():
+    st.warning("⚠️ Please login to access Operations")
+    st.info("Operations page is for planning and optimizing routes. You need an account to access this feature.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button('🔐 Log In', type='primary', use_container_width=True):
+            st.switch_page('pages/login.py')
+    with col2:
+        if st.button('🚀 Sign Up Free', use_container_width=True):
+            st.switch_page('pages/register.py')
+
+    st.stop()
+
+# Check permission for operations
+if not check_permission('read', 'stops'):
+    st.error("🚫 Access denied. Your role does not have permission to view this page.")
+    st.stop()
+
+# Get current user and organization
+user = get_current_user()
+org = get_current_organization()
+
+st.title('🔧 Route Optimization Operations')
+st.markdown(f"**{org.get('name', 'Organization')}** - Plan, optimize, and dispatch daily routes")
+
+# Show subscription banner if needed
+show_subscription_banner()
 
 # Initialize session state
 if 'optimized_routes' not in st.session_state:
@@ -30,6 +61,11 @@ client = get_supabase_client()
 
 # Sidebar for configuration
 with st.sidebar:
+    # Show user menu
+    show_user_menu()
+
+    st.divider()
+
     st.header('⚙️ Configuration')
 
     # Date selection

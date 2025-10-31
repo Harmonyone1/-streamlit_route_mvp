@@ -8,17 +8,53 @@ from datetime import date, timedelta, datetime
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.supabase_client import get_supabase_client, get_routes_by_date
+from utils.auth import init_session_state, is_authenticated, get_current_user, get_current_organization, check_permission, show_user_menu, show_subscription_banner
 
-st.set_page_config(page_title="Dashboard", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Dashboard - RouteFlow", layout="wide", initial_sidebar_state="expanded")
+
+# Initialize session state for authentication
+init_session_state()
+
+# Check authentication
+if not is_authenticated():
+    st.warning("⚠️ Please login to access Dashboard")
+    st.info("Dashboard provides real-time overview of routes, technicians, and operational metrics.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button('🔐 Log In', type='primary', use_container_width=True):
+            st.switch_page('pages/login.py')
+    with col2:
+        if st.button('🚀 Sign Up Free', use_container_width=True):
+            st.switch_page('pages/register.py')
+
+    st.stop()
+
+# Check permission
+if not check_permission('read', 'routes'):
+    st.error("🚫 Access denied. Your role does not have permission to view the dashboard.")
+    st.stop()
+
+# Get current user and organization
+user = get_current_user()
+org = get_current_organization()
 
 st.title('📊 Route Optimization Dashboard')
-st.markdown('Real-time overview of routes, technicians, and operational metrics')
+st.markdown(f"**{org.get('name', 'Organization')}** - Real-time overview of routes and operations")
+
+# Show subscription banner if needed
+show_subscription_banner()
 
 # Initialize Supabase client
 client = get_supabase_client()
 
 # Date selector in sidebar
 with st.sidebar:
+    # Show user menu
+    show_user_menu()
+
+    st.divider()
+
     st.header('Dashboard Controls')
     selected_date = st.date_input('View Date', value=date.today())
 

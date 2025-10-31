@@ -3,11 +3,47 @@ import pandas as pd
 from datetime import datetime, timedelta, time
 from utils.supabase_client import get_supabase_client, create_stop
 from utils.geocoding import geocode_address, format_coordinates
+from utils.auth import init_session_state, is_authenticated, get_current_user, get_current_organization, has_role, check_permission, show_user_menu, show_subscription_banner
 
-st.set_page_config(page_title="Admin Panel", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="Admin Panel - RouteFlow", page_icon="⚙️", layout="wide")
+
+# Initialize session state for authentication
+init_session_state()
+
+# Check authentication
+if not is_authenticated():
+    st.warning("⚠️ Please login to access Admin Panel")
+    st.info("Admin Panel is for system administrators to manage technicians, stops, and settings.")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button('🔐 Log In', type='primary', use_container_width=True):
+            st.switch_page('pages/login.py')
+    with col2:
+        if st.button('🚀 Sign Up Free', use_container_width=True):
+            st.switch_page('pages/register.py')
+
+    st.stop()
+
+# Check permission for admin access (requires admin role or higher)
+if not has_role('admin'):
+    st.error("🚫 Access denied. Admin Panel requires Admin, Owner, or Manager role.")
+    st.info("Contact your organization owner to request admin access.")
+    st.stop()
+
+# Get current user and organization
+user = get_current_user()
+org = get_current_organization()
 
 st.title("⚙️ Admin Panel")
-st.markdown("System administration and management tools")
+st.markdown(f"**{org.get('name', 'Organization')}** - System administration and management")
+
+# Show subscription banner if needed
+show_subscription_banner()
+
+# Sidebar with user menu
+with st.sidebar:
+    show_user_menu()
 
 # Initialize Supabase
 try:
