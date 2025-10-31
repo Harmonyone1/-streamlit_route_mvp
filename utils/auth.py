@@ -173,18 +173,32 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
         # Create user with Supabase Auth
         # Note: Set email_confirm to False for development/testing to skip email verification
         # For production, remove this or set to True
-        response = client.auth.sign_up({
-            "email": email,
-            "password": password,
-            "options": {
-                "data": {
-                    "full_name": full_name,
-                    "company_name": company_name
-                },
-                # Uncomment the line below to skip email verification (DEVELOPMENT ONLY):
-                # "email_confirm": False
-            }
-        })
+        try:
+            response = client.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "full_name": full_name,
+                        "company_name": company_name
+                    },
+                    # Uncomment the line below to skip email verification (DEVELOPMENT ONLY):
+                    # "email_confirm": False
+                }
+            })
+        except Exception as auth_error:
+            error_msg = str(auth_error)
+            print(f"Supabase Auth error: {error_msg}")  # Log for debugging
+
+            # Check for common errors
+            if "User already registered" in error_msg or "already registered" in error_msg.lower():
+                return False, "This email is already registered. Please try logging in instead."
+            elif "Invalid email" in error_msg:
+                return False, "Invalid email address format."
+            elif "password" in error_msg.lower():
+                return False, "Password does not meet requirements (8+ characters, uppercase, lowercase, number)."
+            else:
+                return False, f"Registration error: {error_msg}"
 
         if response.user:
             user_id = response.user.id
