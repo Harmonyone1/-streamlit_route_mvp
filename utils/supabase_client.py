@@ -20,12 +20,14 @@ def get_supabase_client() -> Client:
             supabase_key = os.environ.get('SUPABASE_KEY')
 
         if not supabase_key:
-            st.error("Supabase key not configured. Please set SUPABASE_KEY environment variable or add to secrets.")
+            # Don't use st.error here - it can cause issues during import
+            # Let the calling code handle the display
             return None
 
         return create_client(supabase_url, supabase_key)
     except Exception as e:
-        st.error(f"Error connecting to Supabase: {str(e)}")
+        # Don't use st.error here - it can cause issues during import
+        print(f"Error connecting to Supabase: {str(e)}")
         return None
 
 def init_database_schema(client: Client):
