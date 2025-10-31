@@ -358,9 +358,9 @@ $$ LANGUAGE plpgsql;
 
 CREATE TABLE plan_limits (
     plan_tier TEXT PRIMARY KEY,
-    max_technicians INTEGER NOT NULL,
-    max_stops_per_month INTEGER NOT NULL,
-    max_routes_per_month INTEGER,
+    max_technicians INTEGER,  -- NULL = unlimited
+    max_stops_per_month INTEGER,  -- NULL = unlimited
+    max_routes_per_month INTEGER,  -- NULL = unlimited
     features JSONB DEFAULT '{}'
 );
 
