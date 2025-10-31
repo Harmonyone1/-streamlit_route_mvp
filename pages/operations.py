@@ -10,6 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from utils.supabase_client import get_supabase_client, get_all_stops, get_all_technicians, create_stop
 from utils.optimization import create_data_model, optimize_routes, format_route_for_display
 from utils.maps import visualize_optimized_routes, create_stop_clusters_map, display_map_in_streamlit
+from utils.geocoding import geocode_address, format_coordinates
 
 st.set_page_config(page_title="Operations - Route Optimization", layout="wide")
 
@@ -29,60 +30,14 @@ client = get_supabase_client()
 
 # Sidebar for configuration
 with st.sidebar:
-    st.header('Configuration')
+    st.header('⚙️ Configuration')
 
     # Date selection
-    route_date = st.date_input('Route Date', value=date.today())
+    route_date = st.date_input('📅 Route Date', value=date.today())
 
     st.divider()
 
-    # Quick add stop form
-    with st.expander('➕ Quick Add Stop', expanded=False):
-        with st.form('quick_add_stop'):
-            stop_name = st.text_input('Stop Name')
-            stop_address = st.text_input('Address')
-
-            col1, col2 = st.columns(2)
-            with col1:
-                stop_lat = st.number_input('Latitude', format='%.6f', value=0.0)
-            with col2:
-                stop_lng = st.number_input('Longitude', format='%.6f', value=0.0)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                service_duration = st.number_input('Service Time (min)', min_value=5, value=30)
-            with col2:
-                priority = st.slider('Priority', 1, 5, 1)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                time_start = st.time_input('Time Window Start', value=time(8, 0))
-            with col2:
-                time_end = st.time_input('Time Window End', value=time(17, 0))
-
-            notes = st.text_area('Notes')
-
-            if st.form_submit_button('Add Stop'):
-                if client and stop_name and stop_address:
-                    new_stop = {
-                        'name': stop_name,
-                        'address': stop_address,
-                        'latitude': stop_lat if stop_lat != 0.0 else None,
-                        'longitude': stop_lng if stop_lng != 0.0 else None,
-                        'service_duration': service_duration,
-                        'time_window_start': str(time_start),
-                        'time_window_end': str(time_end),
-                        'priority': priority,
-                        'notes': notes
-                    }
-                    result = create_stop(client, new_stop)
-                    if result:
-                        st.success(f'Stop "{stop_name}" added successfully!')
-                        st.rerun()
-                    else:
-                        st.error('Failed to add stop')
-                else:
-                    st.error('Please fill in all required fields')
+    st.info("💡 Add stops in the 'Stops Management' tab")
 
 # Main content area
 tab1, tab2, tab3, tab4 = st.tabs(['📋 Stops Management', '🔧 Optimization', '🗺️ Route Map', '📊 Route Details'])
@@ -90,6 +45,91 @@ tab1, tab2, tab3, tab4 = st.tabs(['📋 Stops Management', '🔧 Optimization', 
 # TAB 1: Stops Management
 with tab1:
     st.header('Manage Stops')
+
+    # Add Stop Form - Prominent at the top
+    with st.expander('➕ Add New Stop', expanded=True):
+        st.markdown("**Add a new service stop to the database**")
+        st.info("📍 Address will be automatically geocoded to get location coordinates")
+
+        with st.form('add_new_stop', clear_on_submit=True):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                stop_name = st.text_input('Stop Name*', placeholder='ABC Company')
+                stop_address = st.text_input('Complete Address*', placeholder='123 Main St, New York, NY 10001')
+
+                st.caption("💡 Include city, state, and ZIP for best results")
+
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    customer_name = st.text_input('Customer Name', placeholder='John Smith')
+                with col_b:
+                    customer_phone = st.text_input('Customer Phone', placeholder='555-0123')
+
+            with col2:
+                col_e, col_f = st.columns(2)
+                with col_e:
+                    service_duration = st.number_input('Service Time (minutes)*', min_value=5, max_value=480, value=30)
+                with col_f:
+                    priority = st.slider('Priority', min_value=1, max_value=5, value=2, help='1=Low, 5=Critical')
+
+                col3, col4 = st.columns(2)
+                with col3:
+                    time_start = st.time_input('Time Window Start*', value=time(9, 0))
+                with col4:
+                    time_end = st.time_input('Time Window End*', value=time(17, 0))
+
+            notes = st.text_area('Service Notes', placeholder='Special instructions, access codes, etc.')
+
+            submitted = st.form_submit_button('✅ Add Stop to Database', type='primary', use_container_width=True)
+
+            if submitted:
+                if not stop_name or not stop_address:
+                    st.error('❌ Stop Name and Address are required!')
+                else:
+                    if client:
+                        with st.spinner('🌍 Geocoding address...'):
+                            # Geocode the address
+                            coords = geocode_address(stop_address)
+
+                            if coords:
+                                lat, lon = coords
+                                st.success(f'✅ Address geocoded: {format_coordinates(lat, lon)}')
+
+                                try:
+                                    new_stop = {
+                                        'name': stop_name,
+                                        'address': stop_address,
+                                        'latitude': lat,
+                                        'longitude': lon,
+                                        'service_duration': service_duration,
+                                        'time_window_start': str(time_start),
+                                        'time_window_end': str(time_end),
+                                        'priority': priority,
+                                        'customer_name': customer_name if customer_name else None,
+                                        'customer_phone': customer_phone if customer_phone else None,
+                                        'notes': notes if notes else None,
+                                        'status': 'pending'
+                                    }
+                                    result = create_stop(client, new_stop)
+                                    if result:
+                                        st.success(f'✅ Stop "{stop_name}" added successfully!')
+                                        st.balloons()
+                                        st.rerun()
+                                    else:
+                                        st.error('❌ Failed to add stop to database')
+                                except Exception as e:
+                                    st.error(f'❌ Error adding stop: {str(e)}')
+                            else:
+                                st.error('❌ Could not geocode address. Please check the address and try again.')
+                                st.info('💡 Try including more details: street, city, state, ZIP code')
+                    else:
+                        st.error('❌ Database connection not available')
+
+    st.divider()
+
+    # View existing stops section
+    st.subheader('📋 Existing Stops in Database')
 
     col1, col2 = st.columns([3, 1])
 
