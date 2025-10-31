@@ -144,9 +144,9 @@ if 'selected_technician' not in st.session_state:
     st.subheader('Sample Route View')
 
     sample_stops = [
-        {'name': 'ABC Corp', 'address': '123 Main St', 'time': '09:00', 'status': 'pending'},
-        {'name': 'XYZ Industries', 'address': '456 Oak Ave', 'time': '10:30', 'status': 'pending'},
-        {'name': 'Smith Residence', 'address': '789 Pine Rd', 'time': '13:00', 'status': 'pending'},
+        {'name': 'ABC Corp', 'address': '123 Main St, New York, NY 10001', 'time': '09:00', 'status': 'pending'},
+        {'name': 'XYZ Industries', 'address': '456 Oak Ave, Brooklyn, NY 11201', 'time': '10:30', 'status': 'pending'},
+        {'name': 'Smith Residence', 'address': '789 Pine Rd, Queens, NY 11354', 'time': '13:00', 'status': 'pending'},
     ]
 
     for idx, stop in enumerate(sample_stops, 1):
@@ -157,6 +157,29 @@ if 'selected_technician' not in st.session_state:
             <p><strong>🕐</strong> Arrival: {stop['time']}</p>
         </div>
         """, unsafe_allow_html=True)
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            address_encoded = stop['address'].replace(' ', '+')
+            maps_url = f"https://www.google.com/maps/dir/?api=1&destination={address_encoded}"
+            st.markdown(f"""
+                <a href="{maps_url}" target="_blank" style="text-decoration: none;">
+                    <button style="
+                        width: 100%;
+                        padding: 15px;
+                        font-size: 16px;
+                        background-color: #4285F4;
+                        color: white;
+                        border: none;
+                        border-radius: 5px;
+                        cursor: pointer;
+                    ">🚗 Navigate</button>
+                </a>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.button('📍 Check In', key=f'sample_checkin_{idx}', disabled=True)
+        with col3:
+            st.button('✅ Complete', key=f'sample_complete_{idx}', disabled=True)
 
 else:
     # Display route for selected technician
@@ -260,11 +283,34 @@ else:
                         col1, col2, col3 = st.columns(3)
 
                         with col1:
-                            if st.button('🚗 Navigate', key=f'nav_{idx}', use_container_width=True):
-                                # Open Google Maps
-                                address_encoded = stop_data['address'].replace(' ', '+')
+                            # Create Google Maps navigation URL
+                            address_encoded = stop_data['address'].replace(' ', '+')
+                            lat = stop_data.get('latitude')
+                            lon = stop_data.get('longitude')
+
+                            # Use coordinates if available (more accurate), otherwise use address
+                            if lat and lon:
+                                maps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}"
+                            else:
                                 maps_url = f"https://www.google.com/maps/dir/?api=1&destination={address_encoded}"
-                                st.markdown(f'[Open in Google Maps]({maps_url})')
+
+                            # Direct link button (opens in new tab on mobile)
+                            st.markdown(f"""
+                                <a href="{maps_url}" target="_blank" style="text-decoration: none;">
+                                    <button style="
+                                        width: 100%;
+                                        height: 60px;
+                                        font-size: 18px;
+                                        margin: 5px 0;
+                                        background-color: #4285F4;
+                                        color: white;
+                                        border: none;
+                                        border-radius: 5px;
+                                        cursor: pointer;
+                                        font-weight: bold;
+                                    ">🚗 Navigate</button>
+                                </a>
+                            """, unsafe_allow_html=True)
 
                         with col2:
                             if st.button('📍 Check In', key=f'checkin_{idx}', use_container_width=True):
