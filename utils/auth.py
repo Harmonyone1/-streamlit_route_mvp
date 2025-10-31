@@ -65,10 +65,12 @@ def login(email: str, password: str) -> tuple[bool, str]:
         })
 
         if response.user:
+            user_id = response.user.id
+
             # Load user's organization and role
             org_data = client.table('organization_members')\
                 .select('organization_id, role, organizations(*)')\
-                .eq('user_id', response.user.id)\
+                .eq('user_id', user_id)\
                 .eq('is_active', True)\
                 .execute()
 
@@ -78,7 +80,7 @@ def login(email: str, password: str) -> tuple[bool, str]:
                 # Set session state
                 st.session_state.authenticated = True
                 st.session_state.user = {
-                    'id': response.user.id,
+                    'id': user_id,
                     'email': response.user.email,
                     'full_name': response.user.user_metadata.get('full_name', 'User')
                 }
@@ -86,11 +88,70 @@ def login(email: str, password: str) -> tuple[bool, str]:
                 st.session_state.role = member['role']
 
                 # Log event
-                log_event('user_login', {'user_id': response.user.id})
+                log_event('user_login', {'user_id': user_id})
 
                 return True, "Login successful"
             else:
-                return False, "No organization found for user"
+                # No organization found - create one for this user (backward compatibility)
+                try:
+                    import re
+                    from datetime import datetime, timedelta
+
+                    # Get user metadata
+                    full_name = response.user.user_metadata.get('full_name', 'User')
+                    company_name = response.user.user_metadata.get('company_name', f"{full_name}'s Company")
+
+                    # Generate organization slug
+                    slug_base = re.sub(r'[^a-z0-9]+', '-', email.split('@')[0].lower())
+                    org_slug = f"{slug_base}-{user_id[:8]}"
+
+                    # Create organization
+                    org_response = client.table('organizations').insert({
+                        'name': company_name,
+                        'slug': org_slug,
+                        'plan_tier': 'trial',
+                        'subscription_status': 'trialing',
+                        'trial_ends_at': (datetime.now() + timedelta(days=14)).isoformat(),
+                        'is_active': True
+                    }).execute()
+
+                    if org_response.data and len(org_response.data) > 0:
+                        org_id = org_response.data[0]['id']
+
+                        # Create profile if doesn't exist
+                        try:
+                            client.table('profiles').insert({
+                                'id': user_id,
+                                'full_name': full_name,
+                                'onboarding_completed': False
+                            }).execute()
+                        except:
+                            pass  # Profile might already exist
+
+                        # Create organization membership
+                        client.table('organization_members').insert({
+                            'organization_id': org_id,
+                            'user_id': user_id,
+                            'role': 'owner',
+                            'is_active': True
+                        }).execute()
+
+                        # Set session state
+                        st.session_state.authenticated = True
+                        st.session_state.user = {
+                            'id': user_id,
+                            'email': response.user.email,
+                            'full_name': full_name
+                        }
+                        st.session_state.organization = org_response.data[0]
+                        st.session_state.role = 'owner'
+
+                        return True, "Login successful! Organization created."
+
+                except Exception as org_error:
+                    return False, f"Organization setup incomplete. Please contact support. Error: {str(org_error)}"
+
+                return False, "No organization found. Please contact support."
 
         return False, "Invalid credentials"
 
@@ -122,13 +183,63 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
         })
 
         if response.user:
-            # The database trigger will automatically create organization and assign owner role
-            return True, "Registration successful! Please check your email to verify your account."
+            user_id = response.user.id
+
+            # Manually create organization (don't rely on trigger)
+            # Generate organization slug from email
+            import re
+            slug_base = re.sub(r'[^a-z0-9]+', '-', email.split('@')[0].lower())
+            org_slug = f"{slug_base}-{user_id[:8]}"
+
+            # Calculate trial end date (14 days from now)
+            from datetime import datetime, timedelta
+            trial_ends_at = (datetime.now() + timedelta(days=14)).isoformat()
+
+            try:
+                # Create organization
+                org_response = client.table('organizations').insert({
+                    'name': company_name,
+                    'slug': org_slug,
+                    'plan_tier': 'trial',
+                    'subscription_status': 'trialing',
+                    'trial_ends_at': trial_ends_at,
+                    'is_active': True
+                }).execute()
+
+                if org_response.data and len(org_response.data) > 0:
+                    org_id = org_response.data[0]['id']
+
+                    # Create profile
+                    client.table('profiles').insert({
+                        'id': user_id,
+                        'full_name': full_name,
+                        'onboarding_completed': False
+                    }).execute()
+
+                    # Create organization membership with owner role
+                    client.table('organization_members').insert({
+                        'organization_id': org_id,
+                        'user_id': user_id,
+                        'role': 'owner',
+                        'is_active': True
+                    }).execute()
+
+                    return True, "Registration successful! Please check your email to verify your account."
+                else:
+                    return False, "Failed to create organization"
+
+            except Exception as org_error:
+                # If organization creation fails, the user was still created in auth
+                # They can try logging in and we'll handle it gracefully
+                return True, "Account created! Please check your email to verify. If you have issues logging in, contact support."
 
         return False, "Registration failed"
 
     except Exception as e:
-        return False, f"Registration error: {str(e)}"
+        error_msg = str(e)
+        if 'already registered' in error_msg.lower() or 'already exists' in error_msg.lower():
+            return False, "This email is already registered. Please try logging in instead."
+        return False, f"Registration error: {error_msg}"
 
 def logout():
     """Logout current user"""
