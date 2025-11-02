@@ -189,13 +189,13 @@ WHERE u.id = '0fe066f2-63f9-4a54-a719-4c455e80c404';
 -- This is the exact query that failed with 500 error
 -- It should now return results without error
 SELECT
-    organization_id,
-    role,
+    organization_members.organization_id,
+    organization_members.role,
     organizations.*
 FROM organization_members
 JOIN organizations ON organizations.id = organization_members.organization_id
-WHERE user_id = '0fe066f2-63f9-4a54-a719-4c455e80c404'
-  AND is_active = TRUE;
+WHERE organization_members.user_id = '0fe066f2-63f9-4a54-a719-4c455e80c404'
+  AND organization_members.is_active = TRUE;
 
 -- =============================================
 -- ALTERNATIVE: CLEAN SLATE APPROACH
