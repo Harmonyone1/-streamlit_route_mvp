@@ -215,6 +215,7 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
 
             try:
                 # Create organization
+                print(f"Creating organization for user {user_id}: {company_name}")  # Debug log
                 org_response = client.table('organizations').insert({
                     'name': company_name,
                     'slug': org_slug,
@@ -224,32 +225,50 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
                     'is_active': True
                 }).execute()
 
+                print(f"Organization response: {org_response}")  # Debug log
+
                 if org_response.data and len(org_response.data) > 0:
                     org_id = org_response.data[0]['id']
+                    print(f"Organization created with ID: {org_id}")  # Debug log
 
                     # Create profile
-                    client.table('profiles').insert({
+                    print(f"Creating profile for user {user_id}")  # Debug log
+                    profile_response = client.table('profiles').insert({
                         'id': user_id,
                         'full_name': full_name,
                         'onboarding_completed': False
                     }).execute()
+                    print(f"Profile created: {profile_response.data}")  # Debug log
 
                     # Create organization membership with owner role
-                    client.table('organization_members').insert({
+                    print(f"Creating organization membership")  # Debug log
+                    membership_response = client.table('organization_members').insert({
                         'organization_id': org_id,
                         'user_id': user_id,
                         'role': 'owner',
                         'is_active': True
                     }).execute()
+                    print(f"Membership created: {membership_response.data}")  # Debug log
 
-                    return True, "Registration successful! Please check your email to verify your account."
+                    return True, "Registration successful! You can now login to your account."
                 else:
-                    return False, "Failed to create organization"
+                    print(f"Organization creation returned no data")  # Debug log
+                    return False, f"Failed to create organization. Please contact support with error: ORG_CREATE_NO_DATA"
 
             except Exception as org_error:
-                # If organization creation fails, the user was still created in auth
-                # They can try logging in and we'll handle it gracefully
-                return True, "Account created! Please check your email to verify. If you have issues logging in, contact support."
+                # IMPORTANT: If organization creation fails, user was still created in Supabase Auth
+                # This creates an orphaned user account that can't login
+                error_detail = str(org_error)
+                print(f"Organization creation error: {error_detail}")  # Debug log
+
+                # Check for specific RLS policy errors
+                if 'policy' in error_detail.lower() or '42501' in error_detail:
+                    return False, f"Database security error. Please verify RLS policies are configured. Error: {error_detail[:100]}"
+                elif 'unique' in error_detail.lower() or 'duplicate' in error_detail.lower():
+                    return False, f"Organization slug already exists. Please try again. Error: {error_detail[:100]}"
+                else:
+                    # Return detailed error for debugging
+                    return False, f"Failed to create organization. Error: {error_detail[:200]}"
 
         return False, "Registration failed"
 
