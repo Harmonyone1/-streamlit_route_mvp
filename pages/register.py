@@ -239,56 +239,98 @@ with st.form('register_form', clear_on_submit=False):
         else:
             # Attempt registration
             with st.spinner('Creating your account...'):
-                success, message = register(
-                    email=email.strip(),
-                    password=password,
-                    full_name=full_name.strip(),
-                    company_name=company_name.strip()
-                )
+                try:
+                    success, message = register(
+                        email=email.strip(),
+                        password=password,
+                        full_name=full_name.strip(),
+                        company_name=company_name.strip()
+                    )
 
-                if success:
-                    st.success(f'✅ {message}')
-                    st.balloons()
+                    if success:
+                        st.success(f'✅ {message}')
+                        st.balloons()
 
-                    # Show next steps
-                    st.info("""
-                    **Next Steps:**
-                    1. Check your email for verification link
-                    2. Click the link to verify your account
-                    3. Return to login page to sign in
-                    """)
+                        # Show next steps
+                        st.info("""
+                        **Next Steps:**
+                        1. Check your email for verification link (if enabled)
+                        2. Click the link to verify your account (if required)
+                        3. Return to login page to sign in
 
-                    # Provide login button
-                    import time
-                    time.sleep(2)
+                        **Note:** If email confirmation is disabled, you can login immediately.
+                        """)
 
-                    st.markdown("""
-                    <div style="text-align: center; margin-top: 1rem;">
-                        <a href="/login" style="
-                            display: inline-block;
-                            background-color: #2563EB;
-                            color: white;
-                            padding: 0.75rem 2rem;
-                            border-radius: 6px;
-                            text-decoration: none;
-                            font-weight: 600;
-                        ">Go to Login</a>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        # Provide login button
+                        import time
+                        time.sleep(2)
 
-                else:
-                    st.error(f'❌ {message}')
-
-                    # Provide helpful suggestions
-                    if 'already' in message.lower():
-                        st.info('This email is already registered. Try logging in instead.')
                         st.markdown("""
                         <div style="text-align: center; margin-top: 1rem;">
-                            <a href="/login" style="color: #2563EB; text-decoration: none; font-weight: 600;">
-                                Go to Login →
-                            </a>
+                            <a href="/login" style="
+                                display: inline-block;
+                                background-color: #2563EB;
+                                color: white;
+                                padding: 0.75rem 2rem;
+                                border-radius: 6px;
+                                text-decoration: none;
+                                font-weight: 600;
+                            ">Go to Login</a>
                         </div>
                         """, unsafe_allow_html=True)
+
+                    else:
+                        st.error(f'❌ Registration failed: {message}')
+
+                        # Show debugging expander
+                        with st.expander("🔍 Debug Information (for troubleshooting)"):
+                            st.markdown(f"""
+                            **Error Details:**
+                            - Email: `{email.strip()}`
+                            - Company: `{company_name.strip()}`
+                            - Error Message: `{message}`
+
+                            **Common Causes:**
+                            1. **Email already registered** - Try logging in instead
+                            2. **Supabase redirect URLs not configured** - Add deployed app URL in Supabase Auth settings
+                            3. **Email confirmation enabled** - Disable in Supabase or check email
+                            4. **RLS policy issues** - Verify INSERT policies exist for profiles, organizations, organization_members
+                            5. **Network/CORS issues** - Check browser console for errors
+
+                            **Configuration Checklist:**
+                            - [ ] Supabase Site URL: `https://harmonyone1--streamlit-route-mvp-main-z15rkj.streamlit.app`
+                            - [ ] Email confirmation: Disabled (or SMTP configured)
+                            - [ ] RLS policies: INSERT policies created
+                            - [ ] Streamlit app: Rebooted after changes
+                            """)
+
+                        # Provide helpful suggestions
+                        if 'already' in message.lower():
+                            st.info('💡 This email is already registered. Try logging in instead.')
+                            st.markdown("""
+                            <div style="text-align: center; margin-top: 1rem;">
+                                <a href="/login" style="color: #2563EB; text-decoration: none; font-weight: 600;">
+                                    Go to Login →
+                                </a>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        elif 'rls' in message.lower() or 'policy' in message.lower():
+                            st.warning('⚠️ Database security policy error. Contact your administrator to verify RLS policies are configured.')
+                        elif 'email' in message.lower() and 'confirm' in message.lower():
+                            st.warning('⚠️ Email confirmation may be required. Check your email or contact support.')
+
+                except Exception as e:
+                    st.error(f'❌ Unexpected error during registration')
+                    st.exception(e)
+
+                    with st.expander("🔍 Technical Details"):
+                        st.code(str(e))
+                        st.markdown("""
+                        **This error suggests a system issue. Please:**
+                        1. Check your internet connection
+                        2. Try refreshing the page
+                        3. Contact support if the issue persists
+                        """)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
