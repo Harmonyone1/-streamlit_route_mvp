@@ -67,6 +67,12 @@ def login(email: str, password: str) -> tuple[bool, str]:
         if response.user:
             user_id = response.user.id
 
+            # CRITICAL: Set the user's access token on the client
+            # This makes subsequent requests use the authenticated role, not anon!
+            if response.session and response.session.access_token:
+                client.auth.set_session(response.session.access_token, response.session.refresh_token)
+                print(f"Set user session token for authenticated requests")  # Debug log
+
             # Load user's organization and role
             org_data = client.table('organization_members')\
                 .select('organization_id, role, organizations(*)')\
@@ -202,6 +208,12 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
 
         if response.user:
             user_id = response.user.id
+
+            # CRITICAL: Set the user's access token on the client
+            # This makes subsequent requests use the authenticated role, not anon!
+            if response.session and response.session.access_token:
+                client.auth.set_session(response.session.access_token, response.session.refresh_token)
+                print(f"Set user session token for authenticated requests")  # Debug log
 
             # Manually create organization (don't rely on trigger)
             # Generate organization slug from email
