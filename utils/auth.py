@@ -215,6 +215,12 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
                 client.auth.set_session(response.session.access_token, response.session.refresh_token)
                 print(f"Set user session token for authenticated requests")  # Debug log
 
+                # ADDITIONAL FIX: Manually set the Authorization header on the postgrest client
+                # This ensures REST API calls use the user's JWT token
+                access_token = response.session.access_token
+                client.postgrest.auth(access_token)
+                print(f"Set Authorization header on postgrest client")  # Debug log
+
             # Manually create organization (don't rely on trigger)
             # Generate organization slug from email
             import re
