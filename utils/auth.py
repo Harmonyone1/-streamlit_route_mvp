@@ -209,29 +209,19 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
         if response.user:
             user_id = response.user.id
 
-            # CRITICAL FIX: Create a NEW authenticated client with the user's JWT token
-            # The original client uses the anon key, which won't pass RLS checks
-            # We need to create a NEW client that uses the JWT token as the API key
+            # CRITICAL FIX: Manually set Authorization header with JWT token
+            # The client uses anon key by default, but we need to use the user's JWT for RLS
             if response.session and response.session.access_token:
-                print(f"Creating authenticated client for user {user_id}")  # Debug log
-
-                # Get Supabase URL
-                import os
-                from supabase import create_client
-
-                if hasattr(st, 'secrets') and 'supabase' in st.secrets:
-                    supabase_url = st.secrets['supabase']['url']
-                else:
-                    supabase_url = os.environ.get('SUPABASE_URL', 'https://syrrhunexglfceovmdrd.supabase.co')
-
-                # Create NEW client with user's access token (NOT anon key!)
-                # This client will make all requests with the "authenticated" role
                 access_token = response.session.access_token
-                authenticated_client = create_client(supabase_url, access_token)
-                print(f"Created authenticated client with JWT token")  # Debug log
+                print(f"Setting Authorization header for user {user_id}")  # Debug log
 
-                # Use the authenticated client for all subsequent operations
-                client = authenticated_client
+                # Set the authorization header on the postgrest client's session
+                # This ensures all REST API calls use the authenticated role
+                client.postgrest.auth(access_token)
+
+                # Also update the default headers
+                client.postgrest.session.headers['Authorization'] = f'Bearer {access_token}'
+                print(f"Set Bearer token in Authorization header")  # Debug log
 
             # Manually create organization (don't rely on trigger)
             # Generate organization slug from email
