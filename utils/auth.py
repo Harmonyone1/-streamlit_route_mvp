@@ -209,17 +209,29 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
         if response.user:
             user_id = response.user.id
 
-            # CRITICAL: Set the user's access token on the client
-            # This makes subsequent requests use the authenticated role, not anon!
+            # CRITICAL FIX: Create a NEW authenticated client with the user's JWT token
+            # The original client uses the anon key, which won't pass RLS checks
+            # We need to create a NEW client that uses the JWT token as the API key
             if response.session and response.session.access_token:
-                client.auth.set_session(response.session.access_token, response.session.refresh_token)
-                print(f"Set user session token for authenticated requests")  # Debug log
+                print(f"Creating authenticated client for user {user_id}")  # Debug log
 
-                # ADDITIONAL FIX: Manually set the Authorization header on the postgrest client
-                # This ensures REST API calls use the user's JWT token
+                # Get Supabase URL
+                import os
+                from supabase import create_client
+
+                if hasattr(st, 'secrets') and 'supabase' in st.secrets:
+                    supabase_url = st.secrets['supabase']['url']
+                else:
+                    supabase_url = os.environ.get('SUPABASE_URL', 'https://syrrhunexglfceovmdrd.supabase.co')
+
+                # Create NEW client with user's access token (NOT anon key!)
+                # This client will make all requests with the "authenticated" role
                 access_token = response.session.access_token
-                client.postgrest.auth(access_token)
-                print(f"Set Authorization header on postgrest client")  # Debug log
+                authenticated_client = create_client(supabase_url, access_token)
+                print(f"Created authenticated client with JWT token")  # Debug log
+
+                # Use the authenticated client for all subsequent operations
+                client = authenticated_client
 
             # Manually create organization (don't rely on trigger)
             # Generate organization slug from email
