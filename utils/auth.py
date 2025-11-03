@@ -234,46 +234,81 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
             trial_ends_at = (datetime.now() + timedelta(days=14)).isoformat()
 
             try:
-                # Create organization
+                # Create organization using direct HTTP request to ensure proper auth headers
                 print(f"Creating organization for user {user_id}: {company_name}")  # Debug log
-                org_response = client.table('organizations').insert({
+
+                import httpx
+                import os
+
+                # Get Supabase URL
+                if hasattr(st, 'secrets') and 'supabase' in st.secrets:
+                    supabase_url = st.secrets['supabase']['url']
+                    anon_key = st.secrets['supabase']['key']
+                else:
+                    supabase_url = os.environ.get('SUPABASE_URL', 'https://syrrhunexglfceovmdrd.supabase.co')
+                    anon_key = os.environ.get('SUPABASE_KEY')
+
+                # Make direct POST request with proper Authorization header
+                headers = {
+                    'apikey': anon_key,
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                }
+
+                org_data = {
                     'name': company_name,
                     'slug': org_slug,
                     'plan_tier': 'trial',
                     'subscription_status': 'trialing',
                     'trial_ends_at': trial_ends_at,
                     'is_active': True
-                }).execute()
+                }
 
-                print(f"Organization response: {org_response}")  # Debug log
+                response_http = httpx.post(
+                    f"{supabase_url}/rest/v1/organizations",
+                    headers=headers,
+                    json=org_data,
+                    timeout=30.0
+                )
 
-                if org_response.data and len(org_response.data) > 0:
-                    org_id = org_response.data[0]['id']
+                print(f"HTTP Status: {response_http.status_code}")  # Debug log
+                print(f"HTTP Response: {response_http.text[:200]}")  # Debug log
+
+                if response_http.status_code in [200, 201]:
+                    org_response_data = response_http.json()
+                    if isinstance(org_response_data, list) and len(org_response_data) > 0:
+                        org_id = org_response_data[0]['id']
+                    elif isinstance(org_response_data, dict):
+                        org_id = org_response_data['id']
+                    else:
+                        raise Exception(f"Unexpected response format: {org_response_data}")
                     print(f"Organization created with ID: {org_id}")  # Debug log
 
-                    # Create profile
+                    # Create profile using direct HTTP request
                     print(f"Creating profile for user {user_id}")  # Debug log
-                    profile_response = client.table('profiles').insert({
-                        'id': user_id,
-                        'full_name': full_name,
-                        'onboarding_completed': False
-                    }).execute()
-                    print(f"Profile created: {profile_response.data}")  # Debug log
+                    profile_response = httpx.post(
+                        f"{supabase_url}/rest/v1/profiles",
+                        headers=headers,
+                        json={'id': user_id, 'full_name': full_name, 'onboarding_completed': False},
+                        timeout=30.0
+                    )
+                    print(f"Profile HTTP Status: {profile_response.status_code}")  # Debug log
 
-                    # Create organization membership with owner role
+                    # Create organization membership with owner role using direct HTTP request
                     print(f"Creating organization membership")  # Debug log
-                    membership_response = client.table('organization_members').insert({
-                        'organization_id': org_id,
-                        'user_id': user_id,
-                        'role': 'owner',
-                        'is_active': True
-                    }).execute()
-                    print(f"Membership created: {membership_response.data}")  # Debug log
+                    membership_response = httpx.post(
+                        f"{supabase_url}/rest/v1/organization_members",
+                        headers=headers,
+                        json={'organization_id': org_id, 'user_id': user_id, 'role': 'owner', 'is_active': True},
+                        timeout=30.0
+                    )
+                    print(f"Membership HTTP Status: {membership_response.status_code}")  # Debug log
 
                     return True, "Registration successful! You can now login to your account."
                 else:
-                    print(f"Organization creation returned no data")  # Debug log
-                    return False, f"Failed to create organization. Please contact support with error: ORG_CREATE_NO_DATA"
+                    print(f"Organization creation failed")  # Debug log
+                    return False, f"Failed to create organization. Please contact support."
 
             except Exception as org_error:
                 # IMPORTANT: If organization creation fails, user was still created in Supabase Auth
