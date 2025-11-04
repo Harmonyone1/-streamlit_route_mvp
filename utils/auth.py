@@ -209,19 +209,12 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
         if response.user:
             user_id = response.user.id
 
-            # CRITICAL FIX: Manually set Authorization header with JWT token
-            # The client uses anon key by default, but we need to use the user's JWT for RLS
-            if response.session and response.session.access_token:
-                access_token = response.session.access_token
-                print(f"Setting Authorization header for user {user_id}")  # Debug log
+            # CRITICAL: Get the JWT access token - required for RLS authentication
+            if not response.session or not response.session.access_token:
+                return False, "No session token received from authentication"
 
-                # Set the authorization header on the postgrest client's session
-                # This ensures all REST API calls use the authenticated role
-                client.postgrest.auth(access_token)
-
-                # Also update the default headers
-                client.postgrest.session.headers['Authorization'] = f'Bearer {access_token}'
-                print(f"Set Bearer token in Authorization header")  # Debug log
+            access_token = response.session.access_token
+            print(f"Got access token for user {user_id}")  # Debug log
 
             # Manually create organization (don't rely on trigger)
             # Generate organization slug from email
@@ -272,43 +265,45 @@ def register(email: str, password: str, full_name: str, company_name: str) -> tu
                     timeout=30.0
                 )
 
-                print(f"HTTP Status: {response_http.status_code}")  # Debug log
-                print(f"HTTP Response: {response_http.text[:200]}")  # Debug log
+                print(f"Organization HTTP Status: {response_http.status_code}")  # Debug log
+                print(f"Organization HTTP Response: {response_http.text[:500]}")  # Debug log
 
-                if response_http.status_code in [200, 201]:
-                    org_response_data = response_http.json()
-                    if isinstance(org_response_data, list) and len(org_response_data) > 0:
-                        org_id = org_response_data[0]['id']
-                    elif isinstance(org_response_data, dict):
-                        org_id = org_response_data['id']
-                    else:
-                        raise Exception(f"Unexpected response format: {org_response_data}")
-                    print(f"Organization created with ID: {org_id}")  # Debug log
+                if response_http.status_code not in [200, 201]:
+                    error_msg = f"HTTP {response_http.status_code}: {response_http.text[:200]}"
+                    print(f"Organization creation failed: {error_msg}")  # Debug log
+                    return False, f"Failed to create organization: {error_msg}"
 
-                    # Create profile using direct HTTP request
-                    print(f"Creating profile for user {user_id}")  # Debug log
-                    profile_response = httpx.post(
-                        f"{supabase_url}/rest/v1/profiles",
-                        headers=headers,
-                        json={'id': user_id, 'full_name': full_name, 'onboarding_completed': False},
-                        timeout=30.0
-                    )
-                    print(f"Profile HTTP Status: {profile_response.status_code}")  # Debug log
-
-                    # Create organization membership with owner role using direct HTTP request
-                    print(f"Creating organization membership")  # Debug log
-                    membership_response = httpx.post(
-                        f"{supabase_url}/rest/v1/organization_members",
-                        headers=headers,
-                        json={'organization_id': org_id, 'user_id': user_id, 'role': 'owner', 'is_active': True},
-                        timeout=30.0
-                    )
-                    print(f"Membership HTTP Status: {membership_response.status_code}")  # Debug log
-
-                    return True, "Registration successful! You can now login to your account."
+                # Parse organization response
+                org_response_data = response_http.json()
+                if isinstance(org_response_data, list) and len(org_response_data) > 0:
+                    org_id = org_response_data[0]['id']
+                elif isinstance(org_response_data, dict):
+                    org_id = org_response_data['id']
                 else:
-                    print(f"Organization creation failed")  # Debug log
-                    return False, f"Failed to create organization. Please contact support."
+                    raise Exception(f"Unexpected response format: {org_response_data}")
+                print(f"✅ Organization created with ID: {org_id}")  # Debug log
+
+                # Create profile using direct HTTP request
+                print(f"Creating profile for user {user_id}")  # Debug log
+                profile_response = httpx.post(
+                    f"{supabase_url}/rest/v1/profiles",
+                    headers=headers,
+                    json={'id': user_id, 'full_name': full_name, 'onboarding_completed': False},
+                    timeout=30.0
+                )
+                print(f"Profile HTTP Status: {profile_response.status_code}, Response: {profile_response.text[:200]}")  # Debug log
+
+                # Create organization membership with owner role using direct HTTP request
+                print(f"Creating organization membership")  # Debug log
+                membership_response = httpx.post(
+                    f"{supabase_url}/rest/v1/organization_members",
+                    headers=headers,
+                    json={'organization_id': org_id, 'user_id': user_id, 'role': 'owner', 'is_active': True},
+                    timeout=30.0
+                )
+                print(f"Membership HTTP Status: {membership_response.status_code}, Response: {membership_response.text[:200]}")  # Debug log
+
+                return True, "Registration successful! You can now login to your account."
 
             except Exception as org_error:
                 # IMPORTANT: If organization creation fails, user was still created in Supabase Auth
